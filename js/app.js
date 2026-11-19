@@ -2,7 +2,7 @@ import { db, newId, requestPersist } from './db.js';
 import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.2.1';
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -130,14 +130,16 @@ async function viewHome() {
   const t = today();
   const nodes = [];
 
-  if (!isStandalone()) {
-    nodes.push(h('section', { class: 'banner info' },
+  if (!isStandalone() && localGet('hideInstallGuide') !== '1') {
+    const guide = h('section', { class: 'banner info' },
       h('strong', {}, 'ホーム画面に追加してお使いください'),
       h('ol', {},
         h('li', {}, 'Safariの下にある共有ボタン（□に↑）をタップ'),
         h('li', {}, '「ホーム画面に追加」を選ぶ'),
         h('li', {}, 'ホーム画面の「お供」から開く')),
-      h('p', { class: 'small' }, 'ホーム画面から使うと、記録が消えにくくなります。')));
+      h('p', { class: 'small' }, 'ホーム画面から使うと、記録が消えにくくなります。'),
+      h('button', { type: 'button', class: 'btn small', onclick: () => { localSet('hideInstallGuide', '1'); guide.remove(); } }, '追加済みなので表示しない'));
+    nodes.push(guide);
   }
 
   const cal = await calendarStatus(t);
@@ -385,6 +387,8 @@ async function viewPerson(id) {
   );
 }
 
+function localGet(k) { try { return localStorage.getItem(k); } catch (_) { return null; } }
+function localSet(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* 無視 */ } }
 function sessionStorageGet(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } }
 function sessionStorageSet(k, v) { try { sessionStorage.setItem(k, v); } catch (_) { /* 無視 */ } }
 
@@ -612,7 +616,7 @@ async function viewSettings() {
       h('a', { class: 'btn', href: '#/people' }, '人別を開く')),
     card(h('h2', {}, 'データについて'),
       h('p', {}, '記録はすべてこのiPhoneの中だけに保存され、インターネットには送信されません。'),
-      h('p', { class: 'small' }, `保存領域の保護：${persisted ? '有効' : '未確認（ホーム画面から使うと消えにくくなります）'}`),
+      persisted || isStandalone() ? null : h('p', { class: 'small' }, 'ホーム画面に追加して使うと、記録が消えにくくなります。'),
       h('p', { class: 'small' }, `バージョン ${APP_VERSION}`),
       h('details', { class: 'sub' },
         h('summary', {}, 'バックアップと復元'),
