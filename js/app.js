@@ -2,7 +2,7 @@ import { db, newId, requestPersist } from './db.js';
 import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.3.0';
+const APP_VERSION = '0.4.0'; // version.json と必ずそろえる
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -621,6 +621,15 @@ async function viewSettings() {
       h('p', {}, '記録はすべてこのiPhoneの中だけに保存され、インターネットには送信されません。'),
       persisted || isStandalone() ? null : h('p', { class: 'small' }, 'ホーム画面に追加して使うと、記録が消えにくくなります。'),
       h('p', { class: 'small' }, `バージョン ${APP_VERSION}`),
+      h('button', { type: 'button', class: 'btn', onclick: async e => {
+        e.target.disabled = true;
+        const latest = await checkForUpdate();
+        e.target.disabled = false;
+        if (latest === null) { toast('確認できませんでした（通信を確認してください）'); return; }
+        if (latest === APP_VERSION) { toast('最新の版です'); return; }
+        applyUpdate();
+      } }, 'アプリを更新'),
+      h('p', { class: 'small' }, '更新しても記録は消えません。'),
       h('details', { class: 'sub' },
         h('summary', {}, 'バックアップと復元'),
         h('p', { class: 'small' }, '「書き出す」を押すと共有画面が開きます。「ファイルに保存」を選ぶと、iPhoneの「ファイル」アプリやiCloud Driveに保存できます。'),
@@ -670,6 +679,47 @@ async function route() {
 window.addEventListener('hashchange', route);
 route();
 requestPersist();
+
+// ---------- 更新 ----------
+
+// 公開中の版番号を取得（失敗したら null）
+async function checkForUpdate() {
+  try {
+    const res = await fetch('version.json', { cache: 'no-store' });
+    if (!res.ok) return null;
+    const v = (await res.json()).version;
+    if (typeof v !== 'string') return null;
+    showUpdateBar(v !== APP_VERSION);
+    return v;
+  } catch (_) { return null; }
+}
+
+function showUpdateBar(show) {
+  const bar = document.getElementById('updateBar');
+  if (!bar) return;
+  bar.hidden = !show;
+}
+
+// アプリ本体だけを入れ替える（記録データ＝IndexedDBには触れない）
+async function applyUpdate() {
+  toast('更新しています…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) await reg.update().catch(() => {});
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } finally {
+    location.reload();
+  }
+}
+
+document.getElementById('updateBtn').addEventListener('click', applyUpdate);
+checkForUpdate();
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* オフライン機能なしでも動く */ });

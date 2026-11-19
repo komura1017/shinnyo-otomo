@@ -45,6 +45,7 @@ body {
 }
 
 .topbar {
+  flex-wrap: wrap;
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; gap: 8px;
   padding: calc(env(safe-area-inset-top) + 8px) 16px 8px;
@@ -53,7 +54,7 @@ body {
 }
 .topbar h1 { font-size: 18px; margin: 0; flex: 1; text-align: center; }
 .topbar .back {
-  position: absolute; left: 8px; bottom: 6px;
+  position: absolute; left: 8px; top: calc(env(safe-area-inset-top) + 4px);
   background: none; border: 0; color: var(--accent); font-size: 17px; padding: 6px 8px;
 }
 
@@ -175,3 +176,5 @@ details.sub > .btn { margin: 6px 0; }
 .cal-events { list-style: none; padding: 0; margin: 6px 0 0; font-size: 14px; }
 .cal-events li { padding: 2px 0; }
 .cal-events .d { display: inline-block; min-width: 3.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.updatebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-basis: 100%; margin: 8px 0 0; padding: 6px 10px 6px 14px; font-size: 15px; border-radius: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line); }
+.updatebar[hidden] { display: none; }
