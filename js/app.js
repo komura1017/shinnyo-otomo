@@ -2,7 +2,7 @@ import { db, newId, requestPersist } from './db.js';
 import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.2.1';
+const APP_VERSION = '0.3.0';
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -146,7 +146,11 @@ async function viewHome() {
   if (cal.needsReload && cal.everLoaded) {
     nodes.push(h('a', { class: 'banner warn', href: '#/settings' },
       h('strong', {}, `${Number(cal.month.slice(5))}月のイベントカレンダーが未読込です`),
-      h('span', {}, '公式サイトから今月のカレンダーをダウンロードして、設定から読み込んでください。')));
+      h('span', {}, '公式サイトから今月の行事予定表（PDF）をダウンロードして、設定から読み込んでください。')));
+  } else if (cal.tentative) {
+    nodes.push(h('a', { class: 'banner warn', href: '#/settings' },
+      h('strong', {}, `${Number(cal.month.slice(5))}月のカレンダーは「ご参考」版です`),
+      h('span', {}, '確定版が出たら、設定から読み込み直してください。')));
   }
 
   nodes.push(h('div', { class: 'actions' },
@@ -440,7 +444,7 @@ async function viewSesshinForm(id) {
   const typeSel = h('select', {}, typeOptions.map(t => h('option', { value: t }, t)));
   typeSel.value = src.type || typeOptions[0];
   const staffInput = h('input', { type: 'text', value: src.staff || '', placeholder: '空欄でもかまいません', maxlength: 50, autocomplete: 'off' });
-  const eventInput = h('input', { type: 'text', value: src.event || '', placeholder: '未設定', maxlength: 200, autocomplete: 'off' });
+  const eventInput = h('input', { type: 'text', value: src.event || '', placeholder: '未設定', maxlength: 600, autocomplete: 'off' });
   const eventNote = h('p', { class: 'small' });
   const content = h('textarea', { rows: 12, placeholder: '言われたことを書き留めましょう' });
   content.value = src.content || '';
@@ -552,14 +556,11 @@ async function viewSettings() {
     const f = fileInput.files && fileInput.files[0];
     if (!f) return;
     try {
+      calMsg.textContent = '読み取り中…';
       const res = await parseCalendarPdf(f);
-      if (res.pending) {
-        calMsg.textContent = 'PDFの読み取り機能は準備中です。公式カレンダーのPDFを見本としていただいた後に対応します。';
-      } else {
-        await saveCalendar({ ...res, fileName: f.name });
-        toast(`${Number(res.month.slice(5))}月のカレンダーを読み込みました（${res.events.length}件）`);
-        viewSettings();
-      }
+      await saveCalendar({ ...res, fileName: f.name });
+      toast(`${Number(res.month.slice(5))}月の${res.tentative ? '「ご参考」' : ''}カレンダーを読み込みました（${res.events.length}件）`);
+      viewSettings();
     } catch (e) {
       calMsg.textContent = `読み込めませんでした：${e.message}`;
     } finally {
@@ -594,12 +595,14 @@ async function viewSettings() {
 
   render(
     card(h('h2', {}, 'イベントカレンダー'),
-      h('p', {}, cal.current ? `${Number(cal.month.slice(5))}月分は読込済みです（${cal.current.events.length}件）。` : `${Number(cal.month.slice(5))}月分はまだ読み込んでいません。`),
-      h('p', { class: 'small' }, '公式サイトから月間カレンダーのPDFをiPhoneにダウンロードし、ここで選んでください。PDFは端末の中だけで読み取ります。'),
+      h('p', {}, cal.current ? `${Number(cal.month.slice(5))}月分は読込済みです${cal.tentative ? '（ご参考版）' : ''}。` : `${Number(cal.month.slice(5))}月分はまだ読み込んでいません。`),
+      h('p', { class: 'small' }, '公式サイトから月間の行事予定表（PDF）をiPhoneにダウンロードし、ここで選んでください。同じ月を読み込むと置き換わります（「ご参考」版のあと確定版を読み込む場合など）。PDFは端末の中だけで読み取ります。'),
       h('label', { class: 'btn' }, 'PDFを選ぶ', fileInput),
       calMsg,
       cals.length ? h('ul', { class: 'list' }, cals.map(c => h('li', {}, h('div', { class: 'row item' },
-        h('span', {}, `${c.month.replace('-', '年')}月（${c.events.length}件）`),
+        h('details', { class: 'cal-month' },
+          h('summary', {}, `${c.month.replace('-', '年')}月${c.tentative ? '（ご参考）' : ''}`),
+          h('ul', { class: 'cal-events' }, c.events.map(e => h('li', {}, h('span', { class: 'd' }, fmtShort(e.date).slice(5)), e.title)))),
         h('button', { type: 'button', class: 'btn small', onclick: async () => {
           if (!confirmDelete(`${c.month.replace('-', '年')}月のカレンダー`)) return;
           await db.delete('calendars', c.month); viewSettings();

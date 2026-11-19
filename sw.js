@@ -1,8 +1,8 @@
 // オフラインでも開けるよう、アプリ本体だけをキャッシュする。
 // 記録データ(IndexedDB)はここでは扱わず、外部への通信も行わない。
-const CACHE = 'otomo-v3';
+const CACHE = 'otomo-v4';
 const FILES = [
-  './', 'index.html', 'css/app.css', 'js/app.js', 'js/db.js', 'js/calendar.js', 'js/backup.js',
+  './', 'index.html', 'css/app.css', 'js/app.js', 'js/db.js', 'js/calendar.js', 'js/backup.js', 'js/calendar-parse.js', 'js/vendor/pdfjs/pdf.min.mjs', 'js/vendor/pdfjs/pdf.worker.min.mjs',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
 ];
 
