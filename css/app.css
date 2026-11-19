@@ -168,3 +168,5 @@ details summary { color: var(--accent); cursor: pointer; }
   max-width: calc(100% - 32px);
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+details.sub > .btn { margin: 6px 0; }
+.row.item { display: flex; }

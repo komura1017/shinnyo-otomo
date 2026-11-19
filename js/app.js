@@ -1,7 +1,8 @@
 import { db, newId, requestPersist } from './db.js';
+import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.2.0';
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -562,6 +563,29 @@ async function viewSettings() {
     }
   });
 
+  // バックアップ用ファイルは先に用意しておく（iPhoneではタップ直後でないと共有シートが開けないため）
+  const backupFile = await buildBackupFile();
+  const lastBackup = await db.getSetting('lastBackupAt', null);
+  const restoreInput = h('input', { type: 'file', accept: 'application/json,.json', class: 'file' });
+  const backupMsg = h('p', { class: 'small' });
+  restoreInput.addEventListener('change', async () => {
+    const f = restoreInput.files && restoreInput.files[0];
+    restoreInput.value = '';
+    if (!f) return;
+    try {
+      const { dump, exportedAt, counts } = await readBackupFile(f);
+      const when = exportedAt ? new Date(exportedAt).toLocaleString('ja-JP') : '不明';
+      const v = prompt(`${when} のバックアップです。\n（対象者${counts.persons}人・お施餓鬼${counts.segaki}件・接心${counts.sesshin}件）\n\n今の記録はすべてこの内容に置き換わります。\n復元する場合は「復元」と入力してください。`);
+      if (v === null) return;
+      if (v.trim() !== '復元') { toast('復元を取り消しました'); return; }
+      await restoreBackup(dump);
+      toast('復元しました');
+      viewSettings();
+    } catch (e) {
+      backupMsg.textContent = `復元できませんでした：${e.message}`;
+    }
+  });
+
   const persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted().catch(() => false) : false;
 
   render(
@@ -589,8 +613,23 @@ async function viewSettings() {
     card(h('h2', {}, 'データについて'),
       h('p', {}, '記録はすべてこのiPhoneの中だけに保存され、インターネットには送信されません。'),
       h('p', { class: 'small' }, `保存領域の保護：${persisted ? '有効' : '未確認（ホーム画面から使うと消えにくくなります）'}`),
-      h('p', { class: 'small' }, 'バックアップ機能は今後追加予定です。'),
-      h('p', { class: 'small' }, `バージョン ${APP_VERSION}`)),
+      h('p', { class: 'small' }, `バージョン ${APP_VERSION}`),
+      h('details', { class: 'sub' },
+        h('summary', {}, 'バックアップと復元'),
+        h('p', { class: 'small' }, '「書き出す」を押すと共有画面が開きます。「ファイルに保存」を選ぶと、iPhoneの「ファイル」アプリやiCloud Driveに保存できます。'),
+        h('p', { class: 'small' }, lastBackup ? `前回の書き出し：${new Date(lastBackup).toLocaleString('ja-JP')}` : 'まだ書き出していません'),
+        h('button', { type: 'button', class: 'btn', onclick: async () => {
+          try {
+            const r = await shareBackupFile(backupFile);
+            if (r === 'cancelled') return;
+            if (r === 'needs-tap') { toast('もう一度押してください'); return; }
+            await db.setSetting('lastBackupAt', new Date().toISOString());
+            toast(r === 'shared' ? 'バックアップを渡しました' : 'バックアップを書き出しました');
+          } catch (e) { backupMsg.textContent = `書き出せませんでした：${e.message}`; }
+        } }, 'バックアップを書き出す'),
+        h('p', { class: 'small' }, '機種変更などで戻したいときは、保存したファイルを選んでください。今の記録は置き換わります。'),
+        h('label', { class: 'btn' }, 'バックアップから復元', restoreInput),
+        backupMsg)),
   );
 }
 
