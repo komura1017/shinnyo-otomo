@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; manifest-src 'self'; connect-src 'self'; worker-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#6b4f2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="お供">
+<meta name="format-detection" content="telephone=no">
+<title>真如苑のお供</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <button type="button" class="back" id="backBtn" hidden aria-label="戻る">‹ 戻る</button>
+  <h1 id="title">真如苑のお供</h1>
+</header>
+<main id="view" tabindex="-1"></main>
+<nav class="tabbar" aria-label="メニュー">
+  <a href="#/" data-tab="home"><span class="ic">⌂</span>ホーム</a>
+  <a href="#/segaki" data-tab="segaki"><span class="ic">◎</span>お施餓鬼</a>
+  <a href="#/people" data-tab="people"><span class="ic">☺</span>人別</a>
+  <a href="#/sesshin" data-tab="sesshin"><span class="ic">✎</span>接心</a>
+  <a href="#/settings" data-tab="settings"><span class="ic">⚙</span>設定</a>
+</nav>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
