@@ -2,7 +2,7 @@ import { db, newId, requestPersist } from './db.js';
 import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.4.0'; // version.json と必ずそろえる
+const APP_VERSION = '0.4.1'; // version.json と必ずそろえる
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -621,15 +621,6 @@ async function viewSettings() {
       h('p', {}, '記録はすべてこのiPhoneの中だけに保存され、インターネットには送信されません。'),
       persisted || isStandalone() ? null : h('p', { class: 'small' }, 'ホーム画面に追加して使うと、記録が消えにくくなります。'),
       h('p', { class: 'small' }, `バージョン ${APP_VERSION}`),
-      h('button', { type: 'button', class: 'btn', onclick: async e => {
-        e.target.disabled = true;
-        const latest = await checkForUpdate();
-        e.target.disabled = false;
-        if (latest === null) { toast('確認できませんでした（通信を確認してください）'); return; }
-        if (latest === APP_VERSION) { toast('最新の版です'); return; }
-        applyUpdate();
-      } }, 'アプリを更新'),
-      h('p', { class: 'small' }, '更新しても記録は消えません。'),
       h('details', { class: 'sub' },
         h('summary', {}, 'バックアップと復元'),
         h('p', { class: 'small' }, '「書き出す」を押すと共有画面が開きます。「ファイルに保存」を選ぶと、iPhoneの「ファイル」アプリやiCloud Driveに保存できます。'),
@@ -688,21 +679,19 @@ async function checkForUpdate() {
     const res = await fetch('version.json', { cache: 'no-store' });
     if (!res.ok) return null;
     const v = (await res.json()).version;
-    if (typeof v !== 'string') return null;
-    showUpdateBar(v !== APP_VERSION);
-    return v;
+    return typeof v === 'string' ? v : null;
   } catch (_) { return null; }
 }
 
-function showUpdateBar(show) {
-  const bar = document.getElementById('updateBar');
-  if (!bar) return;
-  bar.hidden = !show;
+// 入力中の画面（保存前のデータがある画面）では自動更新しない
+function isFormRoute() {
+  return /^#\/(segaki|sesshin)\/(new|edit)/.test(location.hash);
 }
+
+let pendingUpdate = false;
 
 // アプリ本体だけを入れ替える（記録データ＝IndexedDBには触れない）
 async function applyUpdate() {
-  toast('更新しています…');
   try {
     if ('serviceWorker' in navigator) {
       const reg = await navigator.serviceWorker.getRegistration();
@@ -717,9 +706,24 @@ async function applyUpdate() {
   }
 }
 
-document.getElementById('updateBtn').addEventListener('click', applyUpdate);
-checkForUpdate();
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+// 開いたとき・戻ってきたときに自動で確認し、新しい版があれば黙って入れ替える
+async function autoUpdate() {
+  const v = await checkForUpdate();
+  if (!v || v === APP_VERSION) return;
+  // 公開直後で古いファイルが返る場合などに、何度も読み込み直さないための歯止め
+  try {
+    if (sessionStorage.getItem('autoUpdateTried') === v) return;
+    sessionStorage.setItem('autoUpdateTried', v);
+  } catch (_) { /* 無視 */ }
+  if (isFormRoute()) { pendingUpdate = true; return; }
+  applyUpdate();
+}
+
+window.addEventListener('hashchange', () => {
+  if (pendingUpdate && !isFormRoute()) { pendingUpdate = false; applyUpdate(); }
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') autoUpdate(); });
+autoUpdate();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* オフライン機能なしでも動く */ });

@@ -176,5 +176,3 @@ details.sub > .btn { margin: 6px 0; }
 .cal-events { list-style: none; padding: 0; margin: 6px 0 0; font-size: 14px; }
 .cal-events li { padding: 2px 0; }
 .cal-events .d { display: inline-block; min-width: 3.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
-.updatebar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-basis: 100%; margin: 8px 0 0; padding: 6px 10px 6px 14px; font-size: 15px; border-radius: 12px; background: var(--warn-bg); border: 1px solid var(--warn-line); }
-.updatebar[hidden] { display: none; }
