@@ -50,6 +50,8 @@ const VALIDATORS = {
   segaki: r => isStr(r.id) && isDate(r.date) && Array.isArray(r.entries) &&
     r.entries.every(e => e && isStr(e.personId) && Number.isFinite(e.amount) && e.amount >= 0),
   sesshin: r => isStr(r.id) && isDate(r.date) && optStr(r.type) && optStr(r.staff) && optStr(r.event) && optStr(r.content),
+  goma: r => isStr(r.id) && isDate(r.date) && (r.kind === 'standard' || r.kind === 'taisai') && optStr(r.taisaiId) && optStr(r.taisaiName) &&
+    Array.isArray(r.entries) && r.entries.every(e => e && isStr(e.name) && optStr(e.itemId) && optStr(e.target) && optStr(e.detail)),
   calendars: r => isMonth(r.month) && Array.isArray(r.events) && r.events.every(e => e && isDate(e.date) && isStr(e.title)),
   settings: r => isStr(r.key),
 };
@@ -71,7 +73,7 @@ export async function readBackupFile(file) {
   return {
     dump,
     exportedAt: isStr(dump.exportedAt) ? dump.exportedAt : '',
-    counts: { persons: (dump.data.persons || []).length, segaki: (dump.data.segaki || []).length, sesshin: (dump.data.sesshin || []).length },
+    counts: { persons: (dump.data.persons || []).length, segaki: (dump.data.segaki || []).length, sesshin: (dump.data.sesshin || []).length, goma: (dump.data.goma || []).length },
   };
 }
 

@@ -181,3 +181,12 @@ details.sub > .btn { margin: 6px 0; }
 .cal-events { list-style: none; padding: 0; margin: 6px 0 0; font-size: 14px; }
 .cal-events li { padding: 2px 0; }
 .cal-events .d { display: inline-block; min-width: 3.2em; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pick-main.one { grid-template-columns: auto 1fr; }
+.pick-main.one input { grid-row: auto; }
+.pick-sub { display: grid; gap: 6px; margin-top: 8px; padding-left: 34px; }
+.pick-sub input { font-size: 16px; min-height: 40px; padding: 8px 10px; }
+.chips .for { color: var(--muted); }
+.nowrap { white-space: nowrap; }
+.btn:disabled { opacity: .35; }
+details.item > summary { padding: 2px 0; }
+details.item .btn.danger { margin: 10px 0 0; }
