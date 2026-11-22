@@ -55,11 +55,20 @@ export async function saveCalendar({ month, events, fileName, tentative }) {
   await db.put('calendars', { month, tentative: !!tentative, fileName: String(fileName || '').slice(0, 200), importedAt: new Date().toISOString(), events: clean });
 }
 
-// 指定日のイベント（複数あれば「・」区切り）。無ければ null。
+// 行事名の先頭の時刻（10:00、10時、10時30分、10:00～12:00 など）を外す
+const TIME = '(?:午前|午後)?\\s*\\d{1,2}\\s*(?::\\s*\\d{2}|時\\s*(?:\\d{1,2}\\s*分|半)?)';
+const LEADING_TIME_RE = new RegExp(`^\\s*${TIME}(?:\\s*[~〜～\\-－–—]\\s*(?:${TIME})?)?\\s*`);
+export function stripLeadingTime(title) {
+  const s = String(title).normalize('NFKC');
+  const rest = s.replace(LEADING_TIME_RE, '').trim();
+  return rest || s.trim();
+}
+
+// 指定日のイベント（時刻を外し、同じ行事は1つにまとめて「／」区切り）。無ければ null。
 export async function eventsForDate(dateStr) {
   const cal = await db.get('calendars', dateStr.slice(0, 7));
   if (!cal) return null;
-  const list = cal.events.filter(e => e.date === dateStr).map(e => e.title);
+  const list = [...new Set(cal.events.filter(e => e.date === dateStr).map(e => stripLeadingTime(e.title)))];
   return list.length ? list.join(' ／ ') : '';
 }
 
