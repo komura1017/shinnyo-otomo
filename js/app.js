@@ -2,7 +2,7 @@ import { db, newId, requestPersist } from './db.js';
 import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.4.2'; // version.json と必ずそろえる
+const APP_VERSION = '0.4.3'; // version.json と必ずそろえる
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -106,11 +106,13 @@ function sortOldestFirst(list) {
 const viewEl = document.getElementById('view');
 const titleEl = document.getElementById('title');
 const backBtn = document.getElementById('backBtn');
+const settingsBtn = document.getElementById('settingsBtn');
 
 function setFrame(title, tab, backTo) {
   titleEl.textContent = title;
   document.title = `${title}｜真如苑のお供`;
   document.querySelectorAll('.tabbar a').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
+  settingsBtn.hidden = !(tab === 'home' && !backTo);
   if (backTo) { backBtn.hidden = false; backBtn.onclick = () => { location.hash = backTo; }; }
   else backBtn.hidden = true;
 }
@@ -146,11 +148,11 @@ async function viewHome() {
   if (cal.needsReload && cal.everLoaded) {
     nodes.push(h('a', { class: 'banner warn', href: '#/settings' },
       h('strong', {}, `${Number(cal.month.slice(5))}月のイベントカレンダーが未読込です`),
-      h('span', {}, '公式サイトから今月の行事予定表（PDF）をダウンロードして、ホーム画面の「設定・バックアップ」から読み込んでください。')));
+      h('span', {}, '公式サイトから今月の行事予定表（PDF）をダウンロードして、ホーム画面の右上の「設定」から読み込んでください。')));
   } else if (cal.tentative) {
     nodes.push(h('a', { class: 'banner warn', href: '#/settings' },
       h('strong', {}, `${Number(cal.month.slice(5))}月のカレンダーは「ご参考」版です`),
-      h('span', {}, '確定版が出たら、ホーム画面の「設定・バックアップ」から読み込み直してください。')));
+      h('span', {}, '確定版が出たら、ホーム画面の右上の「設定」から読み込み直してください。')));
   }
 
   nodes.push(h('div', { class: 'actions' },
@@ -164,9 +166,6 @@ async function viewHome() {
 
   const ss = (await db.getAll('sesshin')).sort(byDateDesc);
   nodes.push(card(h('h2', {}, '最近の接心'), ss.length ? h('ul', { class: 'list' }, ss.slice(0, 3).map(sesshinRow)) : empty('まだ記録がありません')));
-
-  nodes.push(h('div', { class: 'actions settings-link' },
-    h('a', { class: 'btn big', href: '#/settings' }, '⚙ 設定・バックアップ')));
 
   render(...nodes);
 }
@@ -533,7 +532,7 @@ async function viewSesshinForm(id) {
 // ---------- 設定 ----------
 
 async function viewSettings() {
-  setFrame('設定・バックアップ', 'home', '#/');
+  setFrame('設定', 'home', '#/');
   const types = await getSesshinTypes();
   const t = today();
   const cal = await calendarStatus(t);

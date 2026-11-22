@@ -57,6 +57,11 @@ body {
   position: absolute; left: 8px; top: calc(env(safe-area-inset-top) + 4px);
   background: none; border: 0; color: var(--accent); font-size: 17px; padding: 6px 8px;
 }
+.topbar .settings {
+  position: absolute; right: 8px; top: calc(env(safe-area-inset-top) + 4px);
+  color: var(--muted); text-decoration: none; font-size: 14px; padding: 8px;
+}
+.topbar .settings[hidden] { display: none; }
 
 main { max-width: 640px; margin: 0 auto; padding: 16px; outline: none; }
 
@@ -104,7 +109,6 @@ h2 small { font-weight: 400; margin-left: 4px; }
 .chips li { background: var(--accent-soft); border-radius: 8px; padding: 2px 8px; font-size: 14px; }
 
 .actions { display: grid; gap: 10px; margin-bottom: 14px; }
-.settings-link { margin-top: 24px; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
