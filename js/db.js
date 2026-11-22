@@ -1,8 +1,8 @@
 // 端末内データベース（IndexedDB）。データは端末の外へ送信しません。
 const DB_NAME = 'shinnyo-otomo';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
-export const STORES = ['persons', 'segaki', 'sesshin', 'calendars', 'settings'];
+export const STORES = ['persons', 'segaki', 'sesshin', 'goma', 'calendars', 'settings'];
 
 let dbPromise = null;
 
@@ -19,6 +19,10 @@ function open() {
       }
       if (!db.objectStoreNames.contains('sesshin')) {
         const s = db.createObjectStore('sesshin', { keyPath: 'id' });
+        s.createIndex('date', 'date');
+      }
+      if (!db.objectStoreNames.contains('goma')) {
+        const s = db.createObjectStore('goma', { keyPath: 'id' });
         s.createIndex('date', 'date');
       }
       // 月ごとのイベントカレンダー（key: 'YYYY-MM'）

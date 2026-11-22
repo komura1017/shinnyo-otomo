@@ -2,7 +2,7 @@ import { db, newId, requestPersist } from './db.js';
 import { buildBackupFile, shareBackupFile, readBackupFile, restoreBackup } from './backup.js';
 import { parseCalendarPdf, saveCalendar, eventsForDate, calendarStatus } from './calendar.js';
 
-const APP_VERSION = '0.4.3'; // version.json と必ずそろえる
+const APP_VERSION = '0.5.0'; // version.json と必ずそろえる
 const DEFAULT_SESSHIN_TYPES = ['向上接心', '相談接心'];
 
 // ---------- 小さな道具 ----------
@@ -529,6 +529,278 @@ async function viewSesshinForm(id) {
   );
 }
 
+// ---------- お護摩 ----------
+
+const GOMA_PRICE = 500; // 1項目500円（固定）
+const DEFAULT_GOMA_ITEMS = [
+  '仏恩報謝', '弁才尊天法楽', '清瀧大権現法楽', '笠法護法善神法楽', '滅悪趣菩薩法楽', '烏枢沙摩明王法楽',
+  '当病平癒', '心願成就', '家内安全', '除災延命', '業務盛大', '除方災', '安産祈願', '交通安全', '学業成就', 'お浄め', '諸祈願',
+].map((name, i) => ({ id: `std${String(i + 1).padStart(2, '0')}`, name, detail: name === '諸祈願' }));
+
+function getGomaItems() { return db.getSetting('gomaItems', DEFAULT_GOMA_ITEMS); }
+function getTaisaiList() { return db.getSetting('gomaTaisai', []); }
+
+function gomaEntryLabel(e) {
+  return `${e.name}${e.detail ? `（${e.detail}）` : ''}`;
+}
+
+function gomaRow(r) {
+  return h('li', {}, h('a', { class: 'item', href: `#/goma/edit/${encodeURIComponent(r.id)}` },
+    h('div', { class: 'row' },
+      h('strong', {}, fmtDate(r.date)),
+      h('span', { class: 'tag' }, r.kind === 'taisai' ? (r.taisaiName || '大祭') : '標準')),
+    h('div', { class: 'meta' }, `${r.entries.length}件 ・ `, h('span', { class: 'amount' }, yen(r.entries.length * GOMA_PRICE))),
+    h('ul', { class: 'chips' }, r.entries.map(e => h('li', {}, gomaEntryLabel(e), h('span', { class: 'for' }, e.target ? ` ▸ ${e.target}` : ' ▸ 自分'))))));
+}
+
+async function viewGomaList() {
+  setFrame('お護摩', 'goma');
+  const all = (await db.getAll('goma')).sort(byDateDesc);
+  render(
+    h('div', { class: 'actions' }, h('a', { class: 'btn primary big', href: '#/goma/new' }, '＋ 新しく記録')),
+    card(h('h2', {}, 'これまでの記録'), all.length ? h('ul', { class: 'list' }, all.map(gomaRow)) : empty('まだ記録がありません')),
+    h('a', { class: 'btn', href: '#/goma/items' }, '項目の追加・並べ替え'),
+  );
+}
+
+// 最初に「標準」か「大祭」かを選ぶ
+function viewGomaKind() {
+  setFrame('お護摩を記録', 'goma', '#/goma');
+  render(
+    h('p', {}, 'どちらのお護摩ですか？'),
+    h('div', { class: 'actions' },
+      h('a', { class: 'btn primary big', href: '#/goma/new/standard' }, '標準'),
+      h('a', { class: 'btn primary big', href: '#/goma/new/taisai' }, '大祭')),
+  );
+}
+
+async function viewGomaForm(kind, id) {
+  const editing = id ? await db.get('goma', id) : null;
+  if (id && !editing) { location.hash = '#/goma'; return; }
+  if (editing) kind = editing.kind;
+  const isTaisai = kind === 'taisai';
+  setFrame(editing ? 'お護摩を編集' : `お護摩を記録（${isTaisai ? '大祭' : '標準'}）`, 'goma', editing ? '#/goma' : '#/goma/new');
+
+  let stdItems = await getGomaItems();
+  let taisaiList = await getTaisaiList();
+  let taisaiId = editing ? editing.taisaiId : (taisaiList.length ? taisaiList[taisaiList.length - 1].id : '');
+
+  // 選んだ項目: itemId -> { name, target, detail }
+  const selected = new Map();
+  if (editing) for (const e of editing.entries) selected.set(e.itemId || `old:${e.name}`, { name: e.name, target: e.target || '', detail: e.detail || '' });
+
+  const dateInput = h('input', { type: 'date', value: editing ? editing.date : today(), required: true });
+  const listEl = h('div', { class: 'pick-list' });
+  const totalEl = h('span', { class: 'amount' });
+  const countEl = h('span', {});
+  const taisaiBox = h('div', {});
+
+  function currentItems() {
+    if (!isTaisai) return stdItems;
+    const t = taisaiList.find(x => x.id === taisaiId);
+    return t ? t.items : [];
+  }
+
+  function updateTotal() {
+    countEl.textContent = `${selected.size}件`;
+    totalEl.textContent = yen(selected.size * GOMA_PRICE);
+  }
+
+  function drawList() {
+    const items = currentItems().map(it => ({ ...it }));
+    // 記録にあって今の一覧にない項目（外した項目など）も表示する
+    for (const [key, v] of selected) if (!items.some(it => it.id === key)) items.push({ id: key, name: v.name, detail: !!v.detail });
+    if (!items.length) {
+      listEl.replaceChildren(empty(isTaisai ? (taisaiId ? '下の欄から、この大祭の項目を追加してください' : 'まず大祭を登録してください') : '項目がありません'));
+      return;
+    }
+    listEl.replaceChildren(...items.map(it => {
+      const on = selected.has(it.id);
+      const v = selected.get(it.id);
+      const cb = h('input', {
+        type: 'checkbox', checked: on, 'aria-label': `${it.name}を選ぶ`,
+        onchange: e => {
+          if (e.target.checked) selected.set(it.id, { name: it.name, target: '', detail: '' });
+          else selected.delete(it.id);
+          drawList(); updateTotal();
+        },
+      });
+      return h('div', { class: 'pick' + (on ? ' on' : '') },
+        h('label', { class: 'pick-main one' }, cb, h('span', { class: 'pick-name' }, it.name)),
+        on ? h('div', { class: 'pick-sub' },
+          it.detail ? h('input', { type: 'text', value: v.detail, placeholder: '内容', maxlength: 100, autocomplete: 'off', 'aria-label': `${it.name}の内容`, oninput: e => { v.detail = e.target.value; } }) : null,
+          h('input', { type: 'text', value: v.target, placeholder: '誰に対して（空欄＝自分）', maxlength: 50, autocomplete: 'off', 'aria-label': `${it.name}は誰に対して`, oninput: e => { v.target = e.target.value; } }),
+        ) : null);
+    }));
+  }
+
+  // 大祭の選択・登録
+  function drawTaisai() {
+    if (!isTaisai) return;
+    if (editing) { taisaiBox.replaceChildren(h('div', { class: 'field' }, h('span', {}, '大祭'), h('strong', {}, editing.taisaiName || '大祭'))); return; }
+    const sel = h('select', {}, taisaiList.map(t => h('option', { value: t.id }, t.name)));
+    sel.value = taisaiId;
+    sel.addEventListener('change', () => { taisaiId = sel.value; selected.clear(); drawList(); updateTotal(); });
+    const newName = h('input', { type: 'text', placeholder: '例：○○大祭', maxlength: 50, autocomplete: 'off' });
+    taisaiBox.replaceChildren(
+      taisaiList.length ? h('label', { class: 'field' }, h('span', {}, 'どの大祭ですか'), sel) : h('p', { class: 'small' }, '大祭がまだ登録されていません。名前を入れて登録してください。'),
+      h('details', { class: 'sub', open: !taisaiList.length },
+        h('summary', {}, '大祭を新しく登録'),
+        h('div', { class: 'inline' }, newName, h('button', { type: 'button', class: 'btn', onclick: async () => {
+          const name = newName.value.trim();
+          if (!name) return;
+          if (taisaiList.some(t => t.name === name)) { toast('同じ名前の大祭があります'); return; }
+          const t = { id: newId(), name, items: [] };
+          taisaiList = [...taisaiList, t];
+          await db.setSetting('gomaTaisai', taisaiList);
+          taisaiId = t.id; selected.clear();
+          drawTaisai(); drawList(); updateTotal();
+          toast(`「${name}」を登録しました。項目を追加してください`);
+        } }, '登録'))));
+  }
+
+  const newItem = h('input', { type: 'text', placeholder: '項目の名前', maxlength: 50, autocomplete: 'off' });
+  async function addItem() {
+    const name = newItem.value.trim();
+    if (!name) return;
+    if (isTaisai && !taisaiId) { toast('先に大祭を登録してください'); return; }
+    if (currentItems().some(it => it.name === name)) { toast('同じ項目があります'); return; }
+    const it = { id: newId(), name };
+    if (isTaisai) {
+      taisaiList = taisaiList.map(t => t.id === taisaiId ? { ...t, items: [...t.items, it] } : t);
+      await db.setSetting('gomaTaisai', taisaiList);
+    } else {
+      stdItems = [...stdItems, it];
+      await db.setSetting('gomaItems', stdItems);
+    }
+    newItem.value = '';
+    selected.set(it.id, { name, target: '', detail: '' });
+    drawList(); updateTotal();
+    toast(`「${name}」を追加しました`);
+  }
+
+  async function save() {
+    const date = dateInput.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { toast('日付を入れてください'); return; }
+    if (isTaisai && !editing && !taisaiId) { toast('大祭を選んでください'); return; }
+    if (!selected.size) { toast('項目を選んでください'); return; }
+    const order = currentItems().map(it => it.id);
+    const rank = k => { const i = order.indexOf(k); return i < 0 ? 1e9 : i; };
+    const entries = [...selected].sort((a, b) => rank(a[0]) - rank(b[0])).map(([key, v]) => ({
+      itemId: key.startsWith('old:') ? null : key, name: v.name, target: v.target.trim(), detail: v.detail.trim(),
+    }));
+    const t = isTaisai ? taisaiList.find(x => x.id === taisaiId) : null;
+    const now = new Date().toISOString();
+    await db.put('goma', {
+      id: editing ? editing.id : newId(), date, kind,
+      taisaiId: isTaisai ? taisaiId : null,
+      taisaiName: isTaisai ? (editing ? editing.taisaiName : t.name) : null,
+      entries, createdAt: editing ? editing.createdAt : now, updatedAt: now,
+    });
+    toast('保存しました');
+    location.hash = '#/goma';
+  }
+
+  async function remove() {
+    if (!confirmDelete('このお護摩の記録')) return;
+    await db.delete('goma', editing.id);
+    toast('削除しました');
+    location.hash = '#/goma';
+  }
+
+  drawTaisai();
+  drawList();
+  updateTotal();
+
+  render(
+    card(
+      h('label', { class: 'field' }, h('span', {}, '日付'), dateInput),
+      taisaiBox,
+      h('h2', {}, '項目', h('small', {}, `（1項目 ${yen(GOMA_PRICE)}）`)),
+      listEl,
+      h('details', { class: 'sub' },
+        h('summary', {}, '項目を追加'),
+        h('div', { class: 'inline' }, newItem, h('button', { type: 'button', class: 'btn', onclick: addItem }, '追加'))),
+    ),
+    h('div', { class: 'savebar' },
+      h('div', { class: 'row' }, h('span', {}, '合計 ', countEl), totalEl),
+      h('button', { type: 'button', class: 'btn primary big', onclick: save }, '保存'),
+      editing ? h('details', { class: 'danger-zone' }, h('summary', {}, '削除について'), h('button', { type: 'button', class: 'btn danger', onclick: remove }, 'この記録を削除')) : null),
+  );
+}
+
+// 項目の追加・並べ替え（標準）と、大祭ごとの項目
+async function viewGomaItems() {
+  setFrame('お護摩の項目', 'goma', '#/goma');
+  const items = await getGomaItems();
+  const taisai = await getTaisaiList();
+
+  async function saveStd(n) { await db.setSetting('gomaItems', n); viewGomaItems(); }
+  async function saveTaisai(n) { await db.setSetting('gomaTaisai', n); viewGomaItems(); }
+
+  const stdList = h('ul', { class: 'list' }, items.map((it, i) => h('li', {}, h('div', { class: 'row item' },
+    h('span', {}, it.name),
+    h('span', { class: 'nowrap' },
+      h('button', { type: 'button', class: 'btn small', 'aria-label': `${it.name}を上へ`, disabled: i === 0, onclick: () => {
+        const n = [...items]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; saveStd(n);
+      } }, '↑'),
+      h('button', { type: 'button', class: 'btn small', 'aria-label': `${it.name}を下へ`, disabled: i === items.length - 1, onclick: () => {
+        const n = [...items]; [n[i + 1], n[i]] = [n[i], n[i + 1]]; saveStd(n);
+      } }, '↓'),
+      h('button', { type: 'button', class: 'btn small', onclick: () => {
+        if (!confirm(`「${it.name}」を項目から外しますか？（これまでの記録はそのまま残ります）`)) return;
+        saveStd(items.filter(x => x.id !== it.id));
+      } }, '外す'))))));
+  const newStd = h('input', { type: 'text', placeholder: '項目の名前', maxlength: 50, autocomplete: 'off' });
+
+  const newTaisai = h('input', { type: 'text', placeholder: '例：○○大祭', maxlength: 50, autocomplete: 'off' });
+
+  render(
+    card(h('h2', {}, '標準の項目'), stdList,
+      h('div', { class: 'inline' }, newStd, h('button', { type: 'button', class: 'btn', onclick: () => {
+        const v = newStd.value.trim();
+        if (!v) return;
+        if (items.some(x => x.name === v)) { toast('すでにあります'); return; }
+        toast('追加しました'); saveStd([...items, { id: newId(), name: v }]);
+      } }, '追加')),
+      h('details', { class: 'sub' }, h('summary', {}, '初めの17項目に戻す'),
+        h('p', { class: 'small' }, '追加した項目や並び順は元に戻ります。これまでの記録はそのまま残ります。'),
+        h('button', { type: 'button', class: 'btn', onclick: () => {
+          if (!confirm('標準の項目を初めの17項目に戻しますか？')) return;
+          saveStd(DEFAULT_GOMA_ITEMS);
+        } }, '戻す'))),
+    card(h('h2', {}, '大祭'),
+      taisai.length ? h('ul', { class: 'list' }, taisai.map(t => {
+        const add = h('input', { type: 'text', placeholder: '項目の名前', maxlength: 50, autocomplete: 'off' });
+        return h('li', {}, h('details', { class: 'item' },
+          h('summary', {}, `${t.name}（${t.items.length}項目）`),
+          t.items.length ? h('ul', { class: 'list' }, t.items.map(it => h('li', {}, h('div', { class: 'row item' },
+            h('span', {}, it.name),
+            h('button', { type: 'button', class: 'btn small', onclick: () => {
+              if (!confirm(`「${it.name}」を外しますか？（これまでの記録はそのまま残ります）`)) return;
+              saveTaisai(taisai.map(x => x.id === t.id ? { ...x, items: x.items.filter(y => y.id !== it.id) } : x));
+            } }, '外す'))))) : empty('まだ項目がありません'),
+          h('div', { class: 'inline' }, add, h('button', { type: 'button', class: 'btn', onclick: () => {
+            const v = add.value.trim();
+            if (!v) return;
+            if (t.items.some(x => x.name === v)) { toast('すでにあります'); return; }
+            toast('追加しました');
+            saveTaisai(taisai.map(x => x.id === t.id ? { ...x, items: [...x.items, { id: newId(), name: v }] } : x));
+          } }, '追加')),
+          h('button', { type: 'button', class: 'btn small danger', onclick: () => {
+            if (!confirmDelete(`「${t.name}」の項目一覧`)) return;
+            saveTaisai(taisai.filter(x => x.id !== t.id));
+          } }, 'この大祭を一覧から削除（記録は残ります）')));
+      })) : empty('まだ登録されていません'),
+      h('div', { class: 'inline' }, newTaisai, h('button', { type: 'button', class: 'btn', onclick: () => {
+        const v = newTaisai.value.trim();
+        if (!v) return;
+        if (taisai.some(x => x.name === v)) { toast('すでにあります'); return; }
+        toast('登録しました'); saveTaisai([...taisai, { id: newId(), name: v, items: [] }]);
+      } }, '大祭を登録'))),
+  );
+}
+
 // ---------- 設定 ----------
 
 async function viewSettings() {
@@ -582,7 +854,7 @@ async function viewSettings() {
     try {
       const { dump, exportedAt, counts } = await readBackupFile(f);
       const when = exportedAt ? new Date(exportedAt).toLocaleString('ja-JP') : '不明';
-      const v = prompt(`${when} のバックアップです。\n（対象者${counts.persons}人・お施餓鬼${counts.segaki}件・接心${counts.sesshin}件）\n\n今の記録はすべてこの内容に置き換わります。\n復元する場合は「復元」と入力してください。`);
+      const v = prompt(`${when} のバックアップです。\n（対象者${counts.persons}人・お施餓鬼${counts.segaki}件・接心${counts.sesshin}件・お護摩${counts.goma}件）\n\n今の記録はすべてこの内容に置き換わります。\n復元する場合は「復元」と入力してください。`);
       if (v === null) return;
       if (v.trim() !== '復元') { toast('復元を取り消しました'); return; }
       await restoreBackup(dump);
@@ -616,6 +888,9 @@ async function viewSettings() {
         if (types.includes(v)) { toast('すでにあります'); return; }
         await db.setSetting('sesshinTypes', [...types, v]); toast('追加しました'); viewSettings();
       } }, '追加'))),
+    card(h('h2', {}, 'お護摩の項目'),
+      h('p', { class: 'small' }, '標準の項目の追加・並べ替えと、大祭ごとの項目の登録ができます。'),
+      h('a', { class: 'btn', href: '#/goma/items' }, '項目を開く')),
     card(h('h2', {}, 'お施餓鬼の対象者'),
       h('p', { class: 'small' }, '名前の変更や非表示は「人別」から人を選んで行えます。'),
       h('a', { class: 'btn', href: '#/people' }, '人別を開く')),
@@ -660,6 +935,11 @@ async function route() {
         if (parts[1] === 'new') return await viewSesshinForm();
         if (parts[1] === 'edit' && parts[2]) return await viewSesshinForm(parts[2]);
         return await viewSesshinList();
+      case 'goma':
+        if (parts[1] === 'new') return parts[2] === 'standard' || parts[2] === 'taisai' ? await viewGomaForm(parts[2]) : viewGomaKind();
+        if (parts[1] === 'edit' && parts[2]) return await viewGomaForm(null, parts[2]);
+        if (parts[1] === 'items') return await viewGomaItems();
+        return await viewGomaList();
       case 'settings': return await viewSettings();
       default: location.hash = '#/';
     }
@@ -687,7 +967,7 @@ async function checkForUpdate() {
 
 // 入力中の画面（保存前のデータがある画面）では自動更新しない
 function isFormRoute() {
-  return /^#\/(segaki|sesshin)\/(new|edit)/.test(location.hash);
+  return /^#\/(segaki|sesshin|goma)\/(new|edit)/.test(location.hash);
 }
 
 let pendingUpdate = false;
